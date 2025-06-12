@@ -21,6 +21,8 @@
         .species-panel.minimized { max-height: none; }
         .species-panel.minimized .species-content { display: none; }
         .food-web { bottom: 20px; right: 20px; width: 320px; max-height: 50vh; overflow-y: auto; }
+        .food-web.minimized { max-height: none; }
+        .food-web.minimized .food-web-content { display: none; }
         
         .header { 
             top: 20px; left: 50%; transform: translateX(-50%); text-align: center; 
@@ -240,9 +242,14 @@
         </div>
     </div>
 
-    <div class="ui-panel food-web">
-        <h3 style="color: #4ecdc4; margin-bottom: 15px;">🕸️ Food Web</h3>
-        <div class="food-web-container" id="foodWebContainer"></div>
+    <div class="ui-panel food-web" id="foodWebPanel">
+        <div class="panel-header" id="foodWebHeader">
+            <span>🕸️ Food Web</span>
+            <button class="minimize-btn" id="foodWebMinimize">−</button>
+        </div>
+        <div class="food-web-content" id="foodWebContent">
+            <div class="food-web-container" id="foodWebContainer"></div>
+        </div>
     </div>
 
     <div class="camera-info">
@@ -570,33 +577,40 @@
                     document.getElementById('loading').style.display = 'none';
                 }, 1000);
                 
-                // Setup draggable species panel
-                this.setupDraggablePanel();
+                // Setup draggable panels
+                this.setupDraggablePanels();
             }
             
-            setupDraggablePanel() {
-                const speciesPanel = document.getElementById('speciesPanel');
-                const speciesHeader = document.getElementById('speciesHeader');
-                const speciesMinimize = document.getElementById('speciesMinimize');
-                const speciesContent = document.getElementById('speciesContent');
+            setupDraggablePanels() {
+                // Setup species panel
+                this.setupDraggablePanel('speciesPanel', 'speciesHeader', 'speciesMinimize');
+                
+                // Setup food web panel  
+                this.setupDraggablePanel('foodWebPanel', 'foodWebHeader', 'foodWebMinimize');
+            }
+            
+            setupDraggablePanel(panelId, headerId, minimizeId) {
+                const panel = document.getElementById(panelId);
+                const header = document.getElementById(headerId);
+                const minimizeBtn = document.getElementById(minimizeId);
                 
                 let isDragging = false;
                 let dragOffset = { x: 0, y: 0 };
                 
                 // Minimize functionality
-                speciesMinimize.addEventListener('click', (e) => {
+                minimizeBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    speciesPanel.classList.toggle('minimized');
-                    speciesMinimize.textContent = speciesPanel.classList.contains('minimized') ? '+' : '−';
+                    panel.classList.toggle('minimized');
+                    minimizeBtn.textContent = panel.classList.contains('minimized') ? '+' : '−';
                 });
                 
                 // Drag functionality
-                speciesHeader.addEventListener('mousedown', (e) => {
+                header.addEventListener('mousedown', (e) => {
                     isDragging = true;
-                    const rect = speciesPanel.getBoundingClientRect();
+                    const rect = panel.getBoundingClientRect();
                     dragOffset.x = e.clientX - rect.left;
                     dragOffset.y = e.clientY - rect.top;
-                    speciesHeader.style.cursor = 'grabbing';
+                    header.style.cursor = 'grabbing';
                     e.preventDefault();
                     e.stopPropagation();
                 });
@@ -608,18 +622,19 @@
                     const y = e.clientY - dragOffset.y;
                     
                     // Keep panel within viewport bounds
-                    const maxX = window.innerWidth - speciesPanel.offsetWidth;
-                    const maxY = window.innerHeight - speciesPanel.offsetHeight;
+                    const maxX = window.innerWidth - panel.offsetWidth;
+                    const maxY = window.innerHeight - panel.offsetHeight;
                     
-                    speciesPanel.style.left = Math.max(0, Math.min(maxX, x)) + 'px';
-                    speciesPanel.style.top = Math.max(0, Math.min(maxY, y)) + 'px';
-                    speciesPanel.style.bottom = 'auto'; // Remove bottom positioning when dragging
+                    panel.style.left = Math.max(0, Math.min(maxX, x)) + 'px';
+                    panel.style.top = Math.max(0, Math.min(maxY, y)) + 'px';
+                    panel.style.bottom = 'auto'; // Remove bottom positioning when dragging
+                    panel.style.right = 'auto'; // Remove right positioning when dragging
                 });
                 
                 document.addEventListener('mouseup', () => {
                     if (isDragging) {
                         isDragging = false;
-                        speciesHeader.style.cursor = 'move';
+                        header.style.cursor = 'move';
                     }
                 });
             }
