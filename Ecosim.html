@@ -1,0 +1,1350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backyard Ecosystem Simulator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0a0a0a; color: white; overflow: hidden; }
+        
+        .ui-panel {
+            position: absolute; background: rgba(0,0,0,0.85); border: 1px solid #333;
+            border-radius: 12px; padding: 20px; backdrop-filter: blur(8px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        
+        .controls { top: 20px; left: 20px; width: 320px; max-height: 90vh; overflow-y: auto; }
+        .ecosystem-stats { top: 20px; right: 20px; width: 350px; max-height: 90vh; overflow-y: auto; }
+        .species-panel { bottom: 20px; left: 20px; width: 400px; max-height: 50vh; overflow-y: auto; }
+        .species-panel.minimized { max-height: none; }
+        .species-panel.minimized .species-content { display: none; }
+        .food-web { bottom: 20px; right: 20px; width: 320px; max-height: 50vh; overflow-y: auto; }
+        
+        .header { 
+            top: 20px; left: 50%; transform: translateX(-50%); text-align: center; 
+            padding: 15px 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .control-group { margin-bottom: 25px; }
+        .control-group h3 { 
+            color: #4ecdc4; border-bottom: 2px solid #333; padding-bottom: 8px; 
+            margin-bottom: 15px; font-size: 1.1em;
+        }
+        
+        .slider-row { margin-bottom: 15px; }
+        .slider-row label { display: block; font-size: 0.9em; margin-bottom: 5px; color: #ccc; }
+        .slider { width: 100%; height: 28px; background: rgba(255,255,255,0.1); border: 1px solid #444; border-radius: 6px; }
+        
+        .button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            border: none; padding: 10px 18px; border-radius: 6px; color: white; 
+            cursor: pointer; margin: 3px; font-size: 0.9em; transition: all 0.3s ease;
+        }
+        .button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); }
+        .button.danger { background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); }
+        .button.success { background: linear-gradient(135deg, #00d2d3 0%, #54a0ff 100%); }
+        
+        .species-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 10px; }
+        .species-card {
+            background: rgba(255,255,255,0.1); border: 1px solid #444; border-radius: 8px; 
+            padding: 12px; text-align: center; cursor: pointer; transition: all 0.3s ease;
+            position: relative; overflow: hidden;
+        }
+        .species-card:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
+        .species-card.active { border-color: #4ecdc4; background: rgba(78, 205, 196, 0.2); }
+        .species-card.extinct { border-color: #ff6b6b; background: rgba(255, 107, 107, 0.2); opacity: 0.6; }
+        
+        .species-icon { font-size: 2em; margin-bottom: 5px; }
+        .species-name { font-size: 0.85em; font-weight: bold; }
+        .species-count { font-size: 0.75em; color: #4ecdc4; margin-top: 3px; }
+        
+        .ecosystem-metric {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 8px 0; border-bottom: 1px solid #333;
+        }
+        .metric-value { color: #4ecdc4; font-weight: bold; }
+        .metric-bar {
+            width: 100px; height: 6px; background: rgba(255,255,255,0.2); 
+            border-radius: 3px; margin-left: 10px; overflow: hidden;
+        }
+        .metric-fill {
+            height: 100%; border-radius: 3px; transition: width 0.5s ease;
+        }
+        
+        .alert { 
+            background: rgba(255,107,107,0.2); border: 1px solid #ff6b6b; border-radius: 8px; 
+            padding: 12px; margin-top: 15px; display: none; font-size: 0.9em;
+        }
+        .alert.show { display: block; animation: slideIn 0.3s ease; }
+        
+        @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .food-web-container { max-height: 300px; overflow-y: auto; }
+        .food-connection { 
+            display: flex; align-items: center; padding: 5px; margin: 2px 0; 
+            background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 0.8em;
+        }
+        
+        .time-display {
+            background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px; 
+            text-align: center; margin-bottom: 15px;
+        }
+        
+        .population-graph {
+            width: 100%; height: 60px; background: rgba(255,255,255,0.1); 
+            border-radius: 6px; margin: 5px 0; position: relative; overflow: hidden;
+        }
+        
+        .panel-header {
+            background: rgba(255,255,255,0.1); padding: 8px 15px; cursor: move;
+            border-bottom: 1px solid #333; display: flex; justify-content: space-between;
+            align-items: center; user-select: none; border-radius: 8px 8px 0 0;
+            margin: -20px -20px 15px -20px;
+        }
+        
+        .minimize-btn {
+            background: none; border: none; color: #4ecdc4; cursor: pointer;
+            font-weight: bold; padding: 2px 8px; border-radius: 3px;
+            transition: background 0.2s ease;
+        }
+        
+        .minimize-btn:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        
+        .camera-info {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.7); padding: 8px 16px; border-radius: 6px; font-size: 0.85em;
+        }
+        
+        .loading {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9); padding: 30px; border-radius: 12px; z-index: 9999;
+            text-align: center;
+        }
+        
+        .spinner {
+            border: 3px solid rgba(255,255,255,0.3); border-top: 3px solid #4ecdc4;
+            border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <div>Initializing Ecosystem...</div>
+    </div>
+
+    <div class="ui-panel header">
+        <h2>🌿 Backyard Ecosystem Simulator</h2>
+        <p>Collapse & Recovery Dynamics</p>
+    </div>
+
+    <div class="ui-panel controls">
+        <div class="time-display">
+            <div><strong>Day:</strong> <span id="dayCounter">1</span></div>
+            <div><strong>Season:</strong> <span id="currentSeason">Spring</span></div>
+            <div><strong>Weather:</strong> <span id="currentWeather">Sunny</span></div>
+        </div>
+
+        <div class="control-group">
+            <h3>🎮 Simulation</h3>
+            <button class="button success" id="startBtn">▶ Start</button>
+            <button class="button" id="pauseBtn">⏸ Pause</button>
+            <button class="button danger" id="resetBtn">🔄 Reset</button>
+            <div class="slider-row">
+                <label>Speed: <span id="speedVal">2x</span></label>
+                <input type="range" min="1" max="10" value="2" class="slider" id="speed">
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>🌍 Environment</h3>
+            <div class="slider-row">
+                <label>Temperature: <span id="tempVal">20°C</span></label>
+                <input type="range" min="0" max="40" value="20" class="slider" id="temperature">
+            </div>
+            <div class="slider-row">
+                <label>Rainfall: <span id="rainVal">50%</span></label>
+                <input type="range" min="0" max="100" value="50" class="slider" id="rainfall">
+            </div>
+            <div class="slider-row">
+                <label>Human Activity: <span id="humanVal">Low</span></label>
+                <input type="range" min="0" max="100" value="20" class="slider" id="humanActivity">
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>📊 View Options</h3>
+            <button class="button" id="topView">🔍 Top View</button>
+            <button class="button" id="ecosystemView">🌿 Ecosystem View</button>
+            <button class="button" id="graphView">📈 Population Graph</button>
+        </div>
+
+        <div class="control-group">
+            <h3>🧪 Experiments</h3>
+            <button class="button danger" id="removeApex">Remove Apex Predator</button>
+            <button class="button danger" id="removeProducers">Remove All Plants</button>
+            <button class="button success" id="introduceInvasive">Add Invasive Species</button>
+        </div>
+    </div>
+
+    <div class="ui-panel ecosystem-stats">
+        <h3 style="color: #4ecdc4; margin-bottom: 15px;">🌱 Ecosystem Health</h3>
+        
+        <div class="ecosystem-metric">
+            <span>Biodiversity Index</span>
+            <span class="metric-value" id="biodiversityVal">85%</span>
+            <div class="metric-bar"><div class="metric-fill" id="biodiversityBar" style="background: #4ecdc4; width: 85%;"></div></div>
+        </div>
+        
+        <div class="ecosystem-metric">
+            <span>Energy Flow</span>
+            <span class="metric-value" id="energyFlowVal">72%</span>
+            <div class="metric-bar"><div class="metric-fill" id="energyFlowBar" style="background: #ffa726; width: 72%;"></div></div>
+        </div>
+        
+        <div class="ecosystem-metric">
+            <span>Stability</span>
+            <span class="metric-value" id="stabilityVal">68%</span>
+            <div class="metric-bar"><div class="metric-fill" id="stabilityBar" style="background: #66bb6a; width: 68%;"></div></div>
+        </div>
+        
+        <div class="ecosystem-metric">
+            <span>Carrying Capacity</span>
+            <span class="metric-value" id="capacityVal">45%</span>
+            <div class="metric-bar"><div class="metric-fill" id="capacityBar" style="background: #ab47bc; width: 45%;"></div></div>
+        </div>
+
+        <h3 style="color: #4ecdc4; margin: 20px 0 10px 0;">📊 Population Trends</h3>
+        <div id="populationTrends"></div>
+
+        <div class="alert" id="alertBox">
+            <strong>⚠️ Ecosystem Alert:</strong> <span id="alertMsg"></span>
+        </div>
+    </div>
+
+    <div class="ui-panel species-panel" id="speciesPanel">
+        <div class="panel-header" id="speciesHeader">
+            <span>🦋 Species Management</span>
+            <button class="minimize-btn" id="speciesMinimize">−</button>
+        </div>
+        <div class="species-content" id="speciesContent">
+            <p style="font-size: 0.9em; color: #aaa; margin-bottom: 15px;">Click species to add/remove from ecosystem</p>
+            <div class="species-grid" id="speciesGrid"></div>
+        </div>
+    </div>
+
+    <div class="ui-panel food-web">
+        <h3 style="color: #4ecdc4; margin-bottom: 15px;">🕸️ Food Web</h3>
+        <div class="food-web-container" id="foodWebContainer"></div>
+    </div>
+
+    <div class="camera-info">
+        🖱️ Mouse: Rotate • 🎡 Wheel: Zoom • 🖱️ Drag: Pan • 🎯 Click: Select
+    </div>
+
+    <script>
+        // Core ecosystem simulation engine
+        class EcosystemSimulator {
+            constructor() {
+                this.species = new Map();
+                this.environment = {
+                    temperature: 20,
+                    rainfall: 50,
+                    humanActivity: 20,
+                    season: 'Spring',
+                    day: 1,
+                    weather: 'Sunny'
+                };
+                
+                this.time = 0;
+                this.isRunning = false;
+                this.speed = 2;
+                
+                this.initializeSpeciesDatabase();
+                this.initializeScene();
+                this.setupUI();
+                this.resetEcosystem();
+                
+                console.log('🌿 Ecosystem Simulator initialized');
+            }
+            
+            initializeSpeciesDatabase() {
+                // Define all possible species with their ecological roles and requirements
+                this.speciesDatabase = {
+                    grass: {
+                        name: 'Grass', icon: '🌱', type: 'producer',
+                        basePopulation: 1000, carryingCapacity: 2000,
+                        growthRate: 0.3, deathRate: 0.1,
+                        requirements: { temperature: [5, 35], rainfall: [20, 100] },
+                        provides: ['food'], consumes: [],
+                        color: 0x4caf50, size: 0.02
+                    },
+                    wildflowers: {
+                        name: 'Wildflowers', icon: '🌼', type: 'producer',
+                        basePopulation: 200, carryingCapacity: 500,
+                        growthRate: 0.2, deathRate: 0.15,
+                        requirements: { temperature: [10, 30], rainfall: [30, 80] },
+                        provides: ['nectar', 'food'], consumes: [],
+                        color: 0xffeb3b, size: 0.03
+                    },
+                    oak_tree: {
+                        name: 'Oak Tree', icon: '🌳', type: 'producer',
+                        basePopulation: 5, carryingCapacity: 20,
+                        growthRate: 0.05, deathRate: 0.02,
+                        requirements: { temperature: [0, 35], rainfall: [40, 100] },
+                        provides: ['shelter', 'food'], consumes: [],
+                        color: 0x795548, size: 0.8
+                    },
+                    aphids: {
+                        name: 'Aphids', icon: '🐛', type: 'herbivore',
+                        basePopulation: 500, carryingCapacity: 2000,
+                        growthRate: 0.5, deathRate: 0.3,
+                        requirements: { temperature: [10, 30] },
+                        provides: ['food'], consumes: ['food'],
+                        predators: ['ladybugs', 'birds'], color: 0x8bc34a, size: 0.005
+                    },
+                    caterpillars: {
+                        name: 'Caterpillars', icon: '🐛', type: 'herbivore',
+                        basePopulation: 100, carryingCapacity: 500,
+                        growthRate: 0.4, deathRate: 0.25,
+                        requirements: { temperature: [15, 30] },
+                        provides: ['food'], consumes: ['food'],
+                        predators: ['birds', 'spiders'], color: 0x689f38, size: 0.02
+                    },
+                    rabbits: {
+                        name: 'Rabbits', icon: '🐰', type: 'herbivore',
+                        basePopulation: 20, carryingCapacity: 100,
+                        growthRate: 0.3, deathRate: 0.15,
+                        requirements: { temperature: [-5, 30], shelter: true },
+                        provides: ['food'], consumes: ['food'],
+                        predators: ['foxes', 'hawks'], color: 0x8d6e63, size: 0.15
+                    },
+                    ladybugs: {
+                        name: 'Ladybugs', icon: '🐞', type: 'carnivore',
+                        basePopulation: 50, carryingCapacity: 200,
+                        growthRate: 0.25, deathRate: 0.2,
+                        requirements: { temperature: [10, 35] },
+                        provides: ['pest_control'], consumes: ['aphids'],
+                        predators: ['spiders', 'birds'], color: 0xf44336, size: 0.008
+                    },
+                    spiders: {
+                        name: 'Spiders', icon: '🕷️', type: 'carnivore',
+                        basePopulation: 30, carryingCapacity: 150,
+                        growthRate: 0.2, deathRate: 0.18,
+                        requirements: { temperature: [5, 35] },
+                        provides: ['pest_control'], consumes: ['aphids', 'caterpillars'],
+                        predators: ['birds'], color: 0x424242, size: 0.012
+                    },
+                    birds: {
+                        name: 'Birds', icon: '🐦', type: 'carnivore',
+                        basePopulation: 15, carryingCapacity: 60,
+                        growthRate: 0.15, deathRate: 0.12,
+                        requirements: { temperature: [-10, 35], shelter: true },
+                        provides: ['seed_dispersal'], consumes: ['aphids', 'caterpillars', 'ladybugs', 'spiders'],
+                        predators: ['hawks'], color: 0x2196f3, size: 0.08
+                    },
+                    foxes: {
+                        name: 'Foxes', icon: '🦊', type: 'apex_predator',
+                        basePopulation: 2, carryingCapacity: 8,
+                        growthRate: 0.1, deathRate: 0.08,
+                        requirements: { temperature: [-20, 30], territory: 50 },
+                        provides: ['population_control'], consumes: ['rabbits'],
+                        predators: [], color: 0xff5722, size: 0.25
+                    },
+                    hawks: {
+                        name: 'Hawks', icon: '🦅', type: 'apex_predator',
+                        basePopulation: 1, carryingCapacity: 5,
+                        growthRate: 0.08, deathRate: 0.06,
+                        requirements: { temperature: [-15, 35], territory: 100 },
+                        provides: ['population_control'], consumes: ['rabbits', 'birds'],
+                        predators: [], color: 0x5d4037, size: 0.3
+                    },
+                    worms: {
+                        name: 'Earthworms', icon: '🪱', type: 'decomposer',
+                        basePopulation: 200, carryingCapacity: 1000,
+                        growthRate: 0.2, deathRate: 0.1,
+                        requirements: { rainfall: [30, 100] },
+                        provides: ['soil_health'], consumes: ['dead_matter'],
+                        predators: ['birds'], color: 0x8d6e63, size: 0.01
+                    },
+                    bees: {
+                        name: 'Bees', icon: '🐝', type: 'pollinator',
+                        basePopulation: 100, carryingCapacity: 500,
+                        growthRate: 0.25, deathRate: 0.2,
+                        requirements: { temperature: [10, 35] },
+                        provides: ['pollination'], consumes: ['nectar'],
+                        predators: ['birds', 'spiders'], color: 0xffc107, size: 0.01
+                    }
+                };
+            }
+            
+            initializeScene() {
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x87ceeb);
+                
+                this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.camera.position.set(15, 12, 15);
+                this.camera.lookAt(0, 0, 0);
+                
+                this.renderer = new THREE.WebGLRenderer({ antialias: true });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                document.body.appendChild(this.renderer.domElement);
+                
+                // Lighting
+                this.ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+                this.scene.add(this.ambientLight);
+                
+                this.directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+                this.directionalLight.position.set(20, 20, 20);
+                this.directionalLight.castShadow = true;
+                this.directionalLight.shadow.mapSize.width = 2048;
+                this.directionalLight.shadow.mapSize.height = 2048;
+                this.scene.add(this.directionalLight);
+                
+                this.createBackyardEnvironment();
+                this.setupControls();
+                this.startRenderLoop();
+                
+                window.addEventListener('resize', () => this.onResize(), false);
+            }
+            
+            createBackyardEnvironment() {
+                // Ground
+                const groundGeometry = new THREE.PlaneGeometry(30, 30);
+                const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x2e7d32 });
+                this.ground = new THREE.Mesh(groundGeometry, groundMaterial);
+                this.ground.rotation.x = -Math.PI / 2;
+                this.ground.receiveShadow = true;
+                this.scene.add(this.ground);
+                
+                // Fence
+                this.createFence();
+                
+                // Garden bed
+                const bedGeometry = new THREE.BoxGeometry(8, 0.2, 4);
+                const bedMaterial = new THREE.MeshLambertMaterial({ color: 0x5d4037 });
+                const gardenBed = new THREE.Mesh(bedGeometry, bedMaterial);
+                gardenBed.position.set(-6, 0.1, -8);
+                this.scene.add(gardenBed);
+                
+                // Pond
+                const pondGeometry = new THREE.CylinderGeometry(3, 3, 0.3, 16);
+                const pondMaterial = new THREE.MeshLambertMaterial({ color: 0x1565c0, transparent: true, opacity: 0.7 });
+                const pond = new THREE.Mesh(pondGeometry, pondMaterial);
+                pond.position.set(8, 0.15, 6);
+                this.scene.add(pond);
+                
+                // Compost pile
+                const compostGeometry = new THREE.ConeGeometry(1.5, 1, 8);
+                const compostMaterial = new THREE.MeshLambertMaterial({ color: 0x3e2723 });
+                const compost = new THREE.Mesh(compostGeometry, compostMaterial);
+                compost.position.set(-8, 0.5, 8);
+                this.scene.add(compost);
+            }
+            
+            createFence() {
+                const fenceMaterial = new THREE.MeshLambertMaterial({ color: 0x8d6e63 });
+                const postGeometry = new THREE.BoxGeometry(0.2, 3, 0.2);
+                const panelGeometry = new THREE.BoxGeometry(4, 2.5, 0.1);
+                
+                // Create fence around perimeter
+                for (let i = 0; i < 4; i++) {
+                    for (let j = 0; j < 7; j++) {
+                        const post = new THREE.Mesh(postGeometry, fenceMaterial);
+                        const panel = new THREE.Mesh(panelGeometry, fenceMaterial);
+                        
+                        let x, z, rotY = 0;
+                        if (i === 0) { x = -15 + j * 4; z = -15; }
+                        else if (i === 1) { x = 15; z = -15 + j * 4; rotY = Math.PI / 2; }
+                        else if (i === 2) { x = 15 - j * 4; z = 15; }
+                        else { x = -15; z = 15 - j * 4; rotY = Math.PI / 2; }
+                        
+                        post.position.set(x, 1.5, z);
+                        panel.position.set(x, 1.25, z);
+                        panel.rotation.y = rotY;
+                        
+                        this.scene.add(post);
+                        if (j < 6) this.scene.add(panel);
+                    }
+                }
+            }
+            
+            setupControls() {
+                let mouseDown = false;
+                let mouseX = 0, mouseY = 0;
+                let cameraDistance = 25;
+                let cameraAngleX = 0.8;
+                let cameraAngleY = 0.5;
+                
+                this.renderer.domElement.addEventListener('mousedown', (e) => {
+                    mouseDown = true;
+                    mouseX = e.clientX;
+                    mouseY = e.clientY;
+                });
+                
+                document.addEventListener('mouseup', () => mouseDown = false);
+                
+                document.addEventListener('mousemove', (e) => {
+                    if (!mouseDown) return;
+                    
+                    let deltaX = e.clientX - mouseX;
+                    let deltaY = e.clientY - mouseY;
+                    
+                    cameraAngleX += deltaX * 0.01;
+                    cameraAngleY += deltaY * 0.01;
+                    cameraAngleY = Math.max(-Math.PI/3, Math.min(Math.PI/3, cameraAngleY));
+                    
+                    this.updateCamera(cameraDistance, cameraAngleX, cameraAngleY);
+                    
+                    mouseX = e.clientX;
+                    mouseY = e.clientY;
+                });
+                
+                this.renderer.domElement.addEventListener('wheel', (e) => {
+                    cameraDistance += e.deltaY * 0.02;
+                    cameraDistance = Math.max(10, Math.min(50, cameraDistance));
+                    this.updateCamera(cameraDistance, cameraAngleX, cameraAngleY);
+                });
+                
+                this.updateCamera = (dist, angleX, angleY) => {
+                    this.camera.position.x = Math.cos(angleX) * Math.cos(angleY) * dist;
+                    this.camera.position.y = Math.sin(angleY) * dist + 5;
+                    this.camera.position.z = Math.sin(angleX) * Math.cos(angleY) * dist;
+                    this.camera.lookAt(0, 0, 0);
+                };
+            }
+            
+            setupUI() {
+                // Species grid setup
+                const speciesGrid = document.getElementById('speciesGrid');
+                Object.keys(this.speciesDatabase).forEach(speciesId => {
+                    const species = this.speciesDatabase[speciesId];
+                    const card = document.createElement('div');
+                    card.className = 'species-card';
+                    card.dataset.species = speciesId;
+                    card.innerHTML = `
+                        <div class="species-icon">${species.icon}</div>
+                        <div class="species-name">${species.name}</div>
+                        <div class="species-count" id="count-${speciesId}">0</div>
+                    `;
+                    card.addEventListener('click', () => this.toggleSpecies(speciesId));
+                    speciesGrid.appendChild(card);
+                });
+                
+                // Button event listeners
+                document.getElementById('startBtn').addEventListener('click', () => this.start());
+                document.getElementById('pauseBtn').addEventListener('click', () => this.pause());
+                document.getElementById('resetBtn').addEventListener('click', () => this.reset());
+                
+                document.getElementById('removeApex').addEventListener('click', () => this.removeApexPredators());
+                document.getElementById('removeProducers').addEventListener('click', () => this.removeAllProducers());
+                document.getElementById('introduceInvasive').addEventListener('click', () => this.introduceInvasiveSpecies());
+                
+                // Sliders
+                this.setupSlider('speed', (val) => { this.speed = parseInt(val); });
+                this.setupSlider('temperature', (val) => { this.environment.temperature = parseInt(val); });
+                this.setupSlider('rainfall', (val) => { this.environment.rainfall = parseInt(val); });
+                this.setupSlider('humanActivity', (val) => { 
+                    this.environment.humanActivity = parseInt(val);
+                    const levels = ['None', 'Low', 'Medium', 'High', 'Extreme'];
+                    const level = Math.floor(parseInt(val) / 25);
+                    document.getElementById('humanVal').textContent = levels[Math.min(level, 4)];
+                });
+                
+                // Camera views
+                document.getElementById('topView').addEventListener('click', () => this.setTopView());
+                document.getElementById('ecosystemView').addEventListener('click', () => this.setEcosystemView());
+                document.getElementById('graphView').addEventListener('click', () => this.setGraphView());
+                
+                // Hide loading screen
+                setTimeout(() => {
+                    document.getElementById('loading').style.display = 'none';
+                }, 1000);
+                
+                // Setup draggable species panel
+                this.setupDraggablePanel();
+            }
+            
+            setupDraggablePanel() {
+                const speciesPanel = document.getElementById('speciesPanel');
+                const speciesHeader = document.getElementById('speciesHeader');
+                const speciesMinimize = document.getElementById('speciesMinimize');
+                const speciesContent = document.getElementById('speciesContent');
+                
+                let isDragging = false;
+                let dragOffset = { x: 0, y: 0 };
+                
+                // Minimize functionality
+                speciesMinimize.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    speciesPanel.classList.toggle('minimized');
+                    speciesMinimize.textContent = speciesPanel.classList.contains('minimized') ? '+' : '−';
+                });
+                
+                // Drag functionality
+                speciesHeader.addEventListener('mousedown', (e) => {
+                    isDragging = true;
+                    const rect = speciesPanel.getBoundingClientRect();
+                    dragOffset.x = e.clientX - rect.left;
+                    dragOffset.y = e.clientY - rect.top;
+                    speciesHeader.style.cursor = 'grabbing';
+                    e.preventDefault();
+                    e.stopPropagation();
+                });
+                
+                document.addEventListener('mousemove', (e) => {
+                    if (!isDragging) return;
+                    
+                    const x = e.clientX - dragOffset.x;
+                    const y = e.clientY - dragOffset.y;
+                    
+                    // Keep panel within viewport bounds
+                    const maxX = window.innerWidth - speciesPanel.offsetWidth;
+                    const maxY = window.innerHeight - speciesPanel.offsetHeight;
+                    
+                    speciesPanel.style.left = Math.max(0, Math.min(maxX, x)) + 'px';
+                    speciesPanel.style.top = Math.max(0, Math.min(maxY, y)) + 'px';
+                    speciesPanel.style.bottom = 'auto'; // Remove bottom positioning when dragging
+                });
+                
+                document.addEventListener('mouseup', () => {
+                    if (isDragging) {
+                        isDragging = false;
+                        speciesHeader.style.cursor = 'move';
+                    }
+                });
+            }
+            
+            setupSlider(id, callback) {
+                const slider = document.getElementById(id);
+                const display = document.getElementById(id + 'Val');
+                
+                slider.addEventListener('input', () => {
+                    let val = slider.value;
+                    if (id === 'speed') display.textContent = val + 'x';
+                    else if (id === 'temperature') display.textContent = val + '°C';
+                    else if (id === 'rainfall') display.textContent = val + '%';
+                    callback(val);
+                });
+                
+                // Initialize
+                callback(slider.value);
+            }
+            
+            resetEcosystem() {
+                // Clear existing species
+                this.species.clear();
+                this.clearVisualization();
+                
+                // Add starter species for a balanced ecosystem
+                const starterSpecies = ['grass', 'wildflowers', 'oak_tree', 'aphids', 'ladybugs', 'birds', 'rabbits', 'worms'];
+                starterSpecies.forEach(speciesId => {
+                    this.addSpecies(speciesId);
+                });
+                
+                this.time = 0;
+                this.environment.day = 1;
+                this.updateDisplay();
+                console.log('🔄 Ecosystem reset with starter species');
+            }
+            
+            addSpecies(speciesId) {
+                const speciesData = this.speciesDatabase[speciesId];
+                if (!speciesData) return;
+                
+                this.species.set(speciesId, {
+                    ...speciesData,
+                    id: speciesId,
+                    population: speciesData.basePopulation,
+                    biomass: speciesData.basePopulation * speciesData.size,
+                    active: true,
+                    populationHistory: []
+                });
+                
+                this.createSpeciesVisualization(speciesId);
+                this.updateSpeciesCard(speciesId);
+                console.log(`➕ Added ${speciesData.name} to ecosystem`);
+            }
+            
+            removeSpecies(speciesId) {
+                if (this.species.has(speciesId)) {
+                    this.species.delete(speciesId);
+                    this.removeSpeciesVisualization(speciesId);
+                    this.updateSpeciesCard(speciesId);
+                    console.log(`➖ Removed ${this.speciesDatabase[speciesId].name} from ecosystem`);
+                }
+            }
+            
+            toggleSpecies(speciesId) {
+                if (this.species.has(speciesId)) {
+                    this.removeSpecies(speciesId);
+                } else {
+                    this.addSpecies(speciesId);
+                }
+                this.updateFoodWeb();
+            }
+            
+            createSpeciesVisualization(speciesId) {
+                const species = this.species.get(speciesId);
+                if (!species) return;
+                
+                // Create instance group for this species
+                const group = new THREE.Group();
+                group.name = speciesId;
+                
+                // Create individual organisms based on population
+                const maxVisible = Math.min(species.population, species.type === 'producer' ? 200 : 50);
+                const scaleFactor = species.population / maxVisible;
+                
+                for (let i = 0; i < maxVisible; i++) {
+                    const organism = this.createOrganism(species);
+                    organism.userData = { species: speciesId, scaleFactor: scaleFactor };
+                    group.add(organism);
+                }
+                
+                this.scene.add(group);
+            }
+            
+            createOrganism(species) {
+                let geometry, material;
+                
+                if (species.type === 'producer') {
+                    if (species.id === 'oak_tree') {
+                        // Tree trunk
+                        const trunk = new THREE.Group();
+                        const trunkGeom = new THREE.CylinderGeometry(0.1, 0.2, 2, 8);
+                        const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8d6e63 });
+                        const trunkMesh = new THREE.Mesh(trunkGeom, trunkMat);
+                        trunkMesh.position.y = 1;
+                        trunk.add(trunkMesh);
+                        
+                        // Tree foliage
+                        const foliageGeom = new THREE.SphereGeometry(1.5, 8, 6);
+                        const foliageMat = new THREE.MeshLambertMaterial({ color: species.color });
+                        const foliageMesh = new THREE.Mesh(foliageGeom, foliageMat);
+                        foliageMesh.position.y = 3;
+                        trunk.add(foliageMesh);
+                        
+                        trunk.position.set(
+                            (Math.random() - 0.5) * 25,
+                            0,
+                            (Math.random() - 0.5) * 25
+                        );
+                        return trunk;
+                    } else {
+                        // Small plants
+                        geometry = new THREE.ConeGeometry(species.size * 2, species.size * 4, 4);
+                        material = new THREE.MeshLambertMaterial({ color: species.color });
+                    }
+                } else {
+                    // Animals
+                    geometry = new THREE.SphereGeometry(species.size, 6, 4);
+                    material = new THREE.MeshLambertMaterial({ color: species.color });
+                }
+                
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.position.set(
+                    (Math.random() - 0.5) * 20,
+                    species.size,
+                    (Math.random() - 0.5) * 20
+                );
+                
+                mesh.castShadow = true;
+                return mesh;
+            }
+            
+            removeSpeciesVisualization(speciesId) {
+                const group = this.scene.getObjectByName(speciesId);
+                if (group) {
+                    this.scene.remove(group);
+                }
+            }
+            
+            clearVisualization() {
+                Object.keys(this.speciesDatabase).forEach(speciesId => {
+                    this.removeSpeciesVisualization(speciesId);
+                });
+            }
+            
+            updateSpeciesCard(speciesId) {
+                const card = document.querySelector(`[data-species="${speciesId}"]`);
+                const countEl = document.getElementById(`count-${speciesId}`);
+                
+                if (this.species.has(speciesId)) {
+                    const species = this.species.get(speciesId);
+                    card.classList.add('active');
+                    card.classList.remove('extinct');
+                    countEl.textContent = Math.round(species.population);
+                    
+                    if (species.population === 0) {
+                        card.classList.add('extinct');
+                        card.classList.remove('active');
+                    }
+                } else {
+                    card.classList.remove('active', 'extinct');
+                    countEl.textContent = '0';
+                }
+            }
+            
+            start() {
+                this.isRunning = true;
+                this.lastTime = performance.now();
+                this.simulate();
+                console.log('▶️ Simulation started');
+            }
+            
+            pause() {
+                this.isRunning = false;
+                console.log('⏸️ Simulation paused');
+            }
+            
+            reset() {
+                this.pause();
+                this.resetEcosystem();
+                console.log('🔄 Simulation reset');
+            }
+            
+            simulate() {
+                if (!this.isRunning) return;
+                
+                const currentTime = performance.now();
+                const deltaTime = (currentTime - this.lastTime) / 1000 * this.speed;
+                this.lastTime = currentTime;
+                
+                if (deltaTime > 0 && deltaTime < 1) {
+                    this.updateEcosystem(deltaTime);
+                    this.updateDisplay();
+                    this.checkAlerts();
+                }
+                
+                setTimeout(() => this.simulate(), 100);
+            }
+            
+            updateEcosystem(deltaTime) {
+                this.time += deltaTime;
+                this.environment.day = Math.floor(this.time / 10) + 1;
+                
+                // Update seasons
+                const seasonDay = this.environment.day % 120;
+                if (seasonDay < 30) this.environment.season = 'Spring';
+                else if (seasonDay < 60) this.environment.season = 'Summer';
+                else if (seasonDay < 90) this.environment.season = 'Autumn';
+                else this.environment.season = 'Winter';
+                
+                // Update weather
+                this.updateWeather();
+                
+                // Update each species population
+                this.species.forEach((species, speciesId) => {
+                    this.updateSpeciesPopulation(species, deltaTime);
+                    this.updateSpeciesVisualization(speciesId, species);
+                });
+                
+                // Process ecological interactions
+                this.processEcologicalInteractions(deltaTime);
+            }
+            
+            updateWeather() {
+                const weathers = ['Sunny', 'Cloudy', 'Rainy', 'Stormy'];
+                if (Math.random() < 0.01) { // 1% chance to change weather each update
+                    this.environment.weather = weathers[Math.floor(Math.random() * weathers.length)];
+                }
+            }
+            
+            updateSpeciesPopulation(species, deltaTime) {
+                if (!species.active) return;
+                
+                // Calculate environmental suitability
+                let suitability = this.calculateEnvironmentalSuitability(species);
+                
+                // Calculate food availability
+                let foodAvailability = this.calculateFoodAvailability(species);
+                
+                // Calculate predation pressure
+                let predationPressure = this.calculatePredationPressure(species);
+                
+                // Population change calculation
+                let growthRate = species.growthRate * suitability * foodAvailability;
+                let deathRate = species.deathRate + predationPressure;
+                
+                // Apply carrying capacity pressure
+                let capacityPressure = species.population / species.carryingCapacity;
+                if (capacityPressure > 0.8) {
+                    growthRate *= (1 - capacityPressure);
+                    deathRate *= (1 + capacityPressure);
+                }
+                
+                // Update population
+                let netGrowth = (growthRate - deathRate) * species.population * deltaTime;
+                species.population = Math.max(0, species.population + netGrowth);
+                
+                // Add random fluctuations
+                if (Math.random() < 0.1) {
+                    species.population *= (0.95 + Math.random() * 0.1);
+                }
+                
+                // Record population history
+                if (species.populationHistory.length > 100) {
+                    species.populationHistory.shift();
+                }
+                species.populationHistory.push(species.population);
+                
+                // Mark as extinct if population drops to near zero
+                if (species.population < 0.1) {
+                    species.population = 0;
+                    species.active = false;
+                }
+            }
+            
+            calculateEnvironmentalSuitability(species) {
+                let suitability = 1.0;
+                
+                // Temperature requirements
+                if (species.requirements.temperature) {
+                    const [minTemp, maxTemp] = species.requirements.temperature;
+                    const temp = this.environment.temperature;
+                    if (temp < minTemp || temp > maxTemp) {
+                        suitability *= 0.1;
+                    } else {
+                        const optimal = (minTemp + maxTemp) / 2;
+                        const deviation = Math.abs(temp - optimal) / (maxTemp - minTemp);
+                        suitability *= (1 - deviation);
+                    }
+                }
+                
+                // Rainfall requirements
+                if (species.requirements.rainfall) {
+                    const [minRain, maxRain] = species.requirements.rainfall;
+                    const rain = this.environment.rainfall;
+                    if (rain < minRain || rain > maxRain) {
+                        suitability *= 0.3;
+                    }
+                }
+                
+                // Seasonal effects
+                if (this.environment.season === 'Winter') {
+                    if (species.type === 'producer') suitability *= 0.5;
+                    if (species.requirements.temperature && species.requirements.temperature[0] > 0) {
+                        suitability *= 0.3;
+                    }
+                }
+                
+                // Human activity impact
+                const humanImpact = this.environment.humanActivity / 100;
+                if (species.type === 'apex_predator') suitability *= (1 - humanImpact * 0.8);
+                else if (species.type === 'carnivore') suitability *= (1 - humanImpact * 0.4);
+                else if (species.type === 'producer') suitability *= (1 - humanImpact * 0.2);
+                
+                return Math.max(0.05, suitability);
+            }
+            
+            calculateFoodAvailability(species) {
+                if (species.type === 'producer') return 1.0;
+                
+                let foodAvailable = 0;
+                let totalFoodNeeded = 1;
+                
+                species.consumes.forEach(foodType => {
+                    if (foodType === 'food') {
+                        // Generic food - sum all producers
+                        this.species.forEach(prey => {
+                            if (prey.type === 'producer') {
+                                foodAvailable += prey.population;
+                            }
+                        });
+                    } else {
+                        // Specific prey species
+                        this.species.forEach((prey, preyId) => {
+                            if (preyId === foodType || prey.provides?.includes(foodType)) {
+                                foodAvailable += prey.population;
+                            }
+                        });
+                    }
+                });
+                
+                return Math.min(1.0, foodAvailable / (totalFoodNeeded * species.population));
+            }
+            
+            calculatePredationPressure(species) {
+                let predationPressure = 0;
+                
+                if (species.predators) {
+                    species.predators.forEach(predatorId => {
+                        if (this.species.has(predatorId)) {
+                            const predator = this.species.get(predatorId);
+                            predationPressure += predator.population * 0.001;
+                        }
+                    });
+                }
+                
+                return Math.min(0.5, predationPressure);
+            }
+            
+            processEcologicalInteractions(deltaTime) {
+                // Pollination effects
+                const pollinators = Array.from(this.species.values()).filter(s => s.provides?.includes('pollination'));
+                const flowersNeedingPollination = Array.from(this.species.values()).filter(s => s.consumes?.includes('nectar'));
+                
+                if (pollinators.length > 0 && flowersNeedingPollination.length > 0) {
+                    const pollinationBonus = pollinators.reduce((sum, p) => sum + p.population, 0) * 0.0001;
+                    flowersNeedingPollination.forEach(flower => {
+                        flower.population *= (1 + pollinationBonus);
+                    });
+                }
+                
+                // Decomposer effects on soil health
+                const decomposers = Array.from(this.species.values()).filter(s => s.type === 'decomposer');
+                if (decomposers.length > 0) {
+                    const soilHealth = decomposers.reduce((sum, d) => sum + d.population, 0) * 0.0001;
+                    const producers = Array.from(this.species.values()).filter(s => s.type === 'producer');
+                    producers.forEach(producer => {
+                        producer.population *= (1 + soilHealth);
+                    });
+                }
+            }
+            
+            updateSpeciesVisualization(speciesId, species) {
+                const group = this.scene.getObjectByName(speciesId);
+                if (!group) return;
+                
+                // Update visibility and scale based on population
+                const targetVisible = Math.min(species.population, species.type === 'producer' ? 200 : 50);
+                const currentVisible = group.children.length;
+                
+                // Add or remove organisms as needed
+                if (targetVisible > currentVisible) {
+                    for (let i = currentVisible; i < targetVisible; i++) {
+                        const organism = this.createOrganism(species);
+                        organism.userData = { species: speciesId, scaleFactor: species.population / targetVisible };
+                        group.add(organism);
+                    }
+                } else if (targetVisible < currentVisible) {
+                    for (let i = currentVisible - 1; i >= targetVisible; i--) {
+                        group.remove(group.children[i]);
+                    }
+                }
+                
+                // Update organism positions and behavior
+                group.children.forEach((organism, index) => {
+                    if (species.type !== 'producer' || species.id !== 'oak_tree') {
+                        // Simple movement for animals and small plants
+                        if (Math.random() < 0.1) {
+                            organism.position.x += (Math.random() - 0.5) * 0.5;
+                            organism.position.z += (Math.random() - 0.5) * 0.5;
+                            
+                            // Keep within bounds
+                            organism.position.x = Math.max(-12, Math.min(12, organism.position.x));
+                            organism.position.z = Math.max(-12, Math.min(12, organism.position.z));
+                        }
+                    }
+                    
+                    // Adjust opacity based on population health
+                    const health = Math.min(1, species.population / species.basePopulation);
+                    if (organism.material) {
+                        organism.material.opacity = 0.3 + health * 0.7;
+                        organism.material.transparent = health < 1;
+                    }
+                });
+            }
+            
+            updateDisplay() {
+                // Update time display
+                document.getElementById('dayCounter').textContent = this.environment.day;
+                document.getElementById('currentSeason').textContent = this.environment.season;
+                document.getElementById('currentWeather').textContent = this.environment.weather;
+                
+                // Update species cards
+                this.species.forEach((species, speciesId) => {
+                    this.updateSpeciesCard(speciesId);
+                });
+                
+                // Update ecosystem metrics
+                this.updateEcosystemMetrics();
+                
+                // Update food web
+                this.updateFoodWeb();
+                
+                // Update population trends
+                this.updatePopulationTrends();
+            }
+            
+            updateEcosystemMetrics() {
+                const activeSpecies = Array.from(this.species.values()).filter(s => s.active && s.population > 0);
+                
+                // Biodiversity Index (Shannon diversity)
+                const totalPop = activeSpecies.reduce((sum, s) => sum + s.population, 0);
+                let biodiversity = 0;
+                if (totalPop > 0) {
+                    activeSpecies.forEach(species => {
+                        const proportion = species.population / totalPop;
+                        if (proportion > 0) {
+                            biodiversity -= proportion * Math.log(proportion);
+                        }
+                    });
+                    biodiversity = (biodiversity / Math.log(activeSpecies.length || 1)) * 100;
+                }
+                
+                // Energy Flow (based on trophic levels)
+                const producers = activeSpecies.filter(s => s.type === 'producer');
+                const herbivores = activeSpecies.filter(s => s.type === 'herbivore');
+                const carnivores = activeSpecies.filter(s => s.type === 'carnivore');
+                const energyFlow = Math.min(100, (producers.length * 40 + herbivores.length * 30 + carnivores.length * 20));
+                
+                // Stability (based on population variance)
+                let stability = 100;
+                activeSpecies.forEach(species => {
+                    if (species.populationHistory.length > 10) {
+                        const recent = species.populationHistory.slice(-10);
+                        const mean = recent.reduce((sum, pop) => sum + pop, 0) / recent.length;
+                        const variance = recent.reduce((sum, pop) => sum + Math.pow(pop - mean, 2), 0) / recent.length;
+                        const cv = Math.sqrt(variance) / (mean || 1);
+                        stability -= cv * 10;
+                    }
+                });
+                stability = Math.max(0, Math.min(100, stability));
+                
+                // Carrying Capacity Usage
+                const totalCapacity = Array.from(this.species.values()).reduce((sum, s) => sum + s.carryingCapacity, 0);
+                const currentPop = Array.from(this.species.values()).reduce((sum, s) => sum + s.population, 0);
+                const capacityUsage = totalCapacity > 0 ? (currentPop / totalCapacity) * 100 : 0;
+                
+                // Update UI
+                this.updateMetricDisplay('biodiversity', biodiversity);
+                this.updateMetricDisplay('energyFlow', energyFlow);
+                this.updateMetricDisplay('stability', stability);
+                this.updateMetricDisplay('capacity', capacityUsage);
+            }
+            
+            updateMetricDisplay(metric, value) {
+                const valueEl = document.getElementById(metric + 'Val');
+                const barEl = document.getElementById(metric + 'Bar');
+                
+                if (valueEl) valueEl.textContent = Math.round(value) + '%';
+                if (barEl) {
+                    barEl.style.width = Math.min(100, Math.max(0, value)) + '%';
+                    
+                    // Color coding
+                    if (value > 70) barEl.style.background = '#4caf50';
+                    else if (value > 40) barEl.style.background = '#ff9800';
+                    else barEl.style.background = '#f44336';
+                }
+            }
+            
+            updateFoodWeb() {
+                const container = document.getElementById('foodWebContainer');
+                container.innerHTML = '';
+                
+                const activeSpecies = Array.from(this.species.entries()).filter(([id, s]) => s.active && s.population > 0);
+                
+                activeSpecies.forEach(([speciesId, species]) => {
+                    if (species.consumes && species.consumes.length > 0) {
+                        species.consumes.forEach(foodType => {
+                            const preySpecies = activeSpecies.find(([id, s]) => 
+                                id === foodType || s.provides?.includes(foodType) || 
+                                (foodType === 'food' && s.type === 'producer')
+                            );
+                            
+                            if (preySpecies) {
+                                const connection = document.createElement('div');
+                                connection.className = 'food-connection';
+                                connection.innerHTML = `
+                                    ${preySpecies[1].icon} ${preySpecies[1].name} → ${species.icon} ${species.name}
+                                `;
+                                container.appendChild(connection);
+                            }
+                        });
+                    }
+                });
+                
+                if (container.children.length === 0) {
+                    container.innerHTML = '<div style="color: #666; font-style: italic;">No active food web connections</div>';
+                }
+            }
+            
+            updatePopulationTrends() {
+                const container = document.getElementById('populationTrends');
+                container.innerHTML = '';
+                
+                const activeSpecies = Array.from(this.species.entries())
+                    .filter(([id, s]) => s.active && s.population > 0)
+                    .slice(0, 6); // Show top 6 species
+                
+                activeSpecies.forEach(([speciesId, species]) => {
+                    const trendDiv = document.createElement('div');
+                    trendDiv.style.marginBottom = '8px';
+                    
+                    const trend = this.calculatePopulationTrend(species);
+                    const trendIcon = trend > 0.1 ? '📈' : trend < -0.1 ? '📉' : '➡️';
+                    const trendColor = trend > 0.1 ? '#4caf50' : trend < -0.1 ? '#f44336' : '#ff9800';
+                    
+                    trendDiv.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>${species.icon} ${species.name}</span>
+                            <span style="color: ${trendColor};">${trendIcon} ${Math.round(species.population)}</span>
+                        </div>
+                        <div class="population-graph" style="background: linear-gradient(90deg, transparent 0%, rgba(78,205,196,0.3) 100%);"></div>
+                    `;
+                    
+                    container.appendChild(trendDiv);
+                });
+            }
+            
+            calculatePopulationTrend(species) {
+                if (species.populationHistory.length < 10) return 0;
+                
+                const recent = species.populationHistory.slice(-10);
+                const older = species.populationHistory.slice(-20, -10);
+                
+                const recentAvg = recent.reduce((sum, pop) => sum + pop, 0) / recent.length;
+                const olderAvg = older.reduce((sum, pop) => sum + pop, 0) / older.length;
+                
+                return (recentAvg - olderAvg) / (olderAvg || 1);
+            }
+            
+            checkAlerts() {
+                const alertBox = document.getElementById('alertBox');
+                const alertMsg = document.getElementById('alertMsg');
+                
+                const activeSpecies = Array.from(this.species.values()).filter(s => s.active && s.population > 0);
+                const extinctSpecies = Array.from(this.species.values()).filter(s => !s.active || s.population === 0);
+                
+                let alert = null;
+                
+                // Ecosystem collapse scenarios
+                if (activeSpecies.length <= 2) {
+                    alert = 'ECOSYSTEM COLLAPSE! Only ' + activeSpecies.length + ' species remaining.';
+                } else if (extinctSpecies.length > activeSpecies.length) {
+                    alert = 'MASS EXTINCTION EVENT! More species extinct than alive.';
+                } else if (activeSpecies.filter(s => s.type === 'producer').length === 0) {
+                    alert = 'NO PRODUCERS! All plant life extinct - ecosystem will collapse.';
+                } else if (activeSpecies.filter(s => s.type === 'apex_predator').length === 0 && 
+                          Array.from(this.species.values()).some(s => s.type === 'apex_predator')) {
+                    alert = 'APEX PREDATORS EXTINCT! Herbivore populations may explode.';
+                } else if (this.environment.humanActivity > 80) {
+                    alert = 'EXTREME HUMAN DISTURBANCE! Wildlife populations under severe stress.';
+                }
+                
+                if (alert) {
+                    alertMsg.textContent = alert;
+                    alertBox.classList.add('show');
+                } else {
+                    alertBox.classList.remove('show');
+                }
+            }
+            
+            // Experimental functions
+            removeApexPredators() {
+                const apexPredators = Array.from(this.species.keys()).filter(id => 
+                    this.species.get(id).type === 'apex_predator'
+                );
+                apexPredators.forEach(id => this.removeSpecies(id));
+                console.log('🦅 All apex predators removed');
+            }
+            
+            removeAllProducers() {
+                const producers = Array.from(this.species.keys()).filter(id => 
+                    this.species.get(id).type === 'producer'
+                );
+                producers.forEach(id => this.removeSpecies(id));
+                console.log('🌱 All producers removed - ecosystem will collapse');
+            }
+            
+            introduceInvasiveSpecies() {
+                // Add a hypothetical invasive species with high growth rate
+                const invasiveId = 'invasive_plant';
+                if (!this.species.has(invasiveId)) {
+                    this.speciesDatabase[invasiveId] = {
+                        name: 'Invasive Plant', icon: '☠️', type: 'producer',
+                        basePopulation: 50, carryingCapacity: 3000,
+                        growthRate: 0.8, deathRate: 0.05,
+                        requirements: { temperature: [-10, 45], rainfall: [10, 100] },
+                        provides: ['food'], consumes: [],
+                        color: 0x8b0000, size: 0.04
+                    };
+                    
+                    // Add card to UI
+                    const speciesGrid = document.getElementById('speciesGrid');
+                    const card = document.createElement('div');
+                    card.className = 'species-card';
+                    card.dataset.species = invasiveId;
+                    card.innerHTML = `
+                        <div class="species-icon">☠️</div>
+                        <div class="species-name">Invasive Plant</div>
+                        <div class="species-count" id="count-${invasiveId}">0</div>
+                    `;
+                    card.addEventListener('click', () => this.toggleSpecies(invasiveId));
+                    speciesGrid.appendChild(card);
+                    
+                    this.addSpecies(invasiveId);
+                    console.log('☠️ Invasive species introduced');
+                }
+            }
+            
+            // Camera control functions
+            setTopView() {
+                this.camera.position.set(0, 30, 0);
+                this.camera.lookAt(0, 0, 0);
+            }
+            
+            setEcosystemView() {
+                this.camera.position.set(15, 12, 15);
+                this.camera.lookAt(0, 0, 0);
+            }
+            
+            setGraphView() {
+                this.camera.position.set(25, 8, 0);
+                this.camera.lookAt(0, 0, 0);
+            }
+            
+            startRenderLoop() {
+                const renderLoop = () => {
+                    this.renderer.render(this.scene, this.camera);
+                    requestAnimationFrame(renderLoop);
+                };
+                renderLoop();
+            }
+            
+            onResize() {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        }
+
+        // Initialize the ecosystem simulator
+        function initializeSimulator() {
+            try {
+                window.ecosystemSim = new EcosystemSimulator();
+                console.log('🌿 Backyard Ecosystem Simulator loaded successfully');
+            } catch (error) {
+                console.error('❌ Failed to initialize ecosystem simulator:', error);
+                document.body.innerHTML = `
+                    <div style="display: flex; align-items: center; justify-content: center; height: 100vh; background: #1a1a1a; color: white; text-align: center;">
+                        <div>
+                            <h2>❌ Ecosystem Simulator Failed to Load</h2>
+                            <p style="margin-top: 10px; color: #ccc;">${error.message}</p>
+                            <p style="margin-top: 10px; color: #888;">Please refresh the page to try again.</p>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // Start the simulator when page loads
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeSimulator);
+        } else {
+            initializeSimulator();
+        }
+    </script>
+</body>
+</html>
